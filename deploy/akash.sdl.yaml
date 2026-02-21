@@ -1,0 +1,78 @@
+---
+# Akash SDL (Stack Definition Language) for lens distortion correction training.
+#
+# How to deploy:
+#   1. Upload your local dataset zip to a shareable direct-download URL.
+#      (Google Drive → Share → "Anyone with link" → use a tool like
+#       https://drive.google.com/uc?export=download&id=FILE_ID,
+#       or upload to S3/Dropbox and grab the direct link)
+#   2. Push your Docker image to Docker Hub:
+#        docker build -t YOUR_DOCKERHUB_USER/lens-correction:latest .
+#        docker push YOUR_DOCKERHUB_USER/lens-correction:latest
+#   3. Fill in YOUR_DOCKERHUB_USER and DATA_URL below.
+#   4. Go to console.akash.network → Deploy → Upload this file.
+#   5. Choose a bid from providers and deploy.
+#   6. Once training finishes, open the forwarded port 8080 to download outputs.
+
+version: "2.0"
+
+services:
+  training:
+    image: YOUR_DOCKERHUB_USER/lens-correction:latest
+    env:
+      - DATA_URL=YOUR_DIRECT_DOWNLOAD_URL   # direct link to your dataset zip
+      - PHASE=both           # "1", "2", or "both"
+      - PHASE1_EPOCHS=60
+      - PHASE2_EPOCHS=40
+      - PHASE1_BATCH=8
+      - PHASE2_BATCH=4
+      - PHASE2_RESOLUTION=768
+    expose:
+      - port: 8080            # HTTP file server for downloading outputs
+        as: 8080
+        to:
+          - global: true
+    resources:
+      cpu:
+        units: 8
+      memory:
+        size: 32Gi
+      gpu:
+        units: 1
+        attributes:
+          vendor:
+            nvidia:
+              - model: rtx4090   # preferred; Akash will also bid rtx3090, a100
+      storage:
+        - size: 120Gi            # ~40 GB data + model checkpoints + outputs
+
+profiles:
+  compute:
+    training:
+      resources:
+        cpu:
+          units: 8
+        memory:
+          size: 32Gi
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+                - model: rtx4090
+        storage:
+          - size: 120Gi
+
+  placement:
+    akash:
+      # No geographic restrictions — pick lowest-cost provider
+      pricing:
+        training:
+          denom: uakt
+          amount: 10000         # max bid per block (~6s); adjust for your budget
+
+deployment:
+  training:
+    akash:
+      profile: training
+      count: 1
