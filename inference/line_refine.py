@@ -16,6 +16,13 @@ from scipy.optimize import least_squares
 
 import config
 
+# Bounds aligned with training-time activations in ParamHead
+K1_BOUNDS = (-0.8, 0.8)
+K2_BOUNDS = (-0.4, 0.4)
+CX_BOUNDS = (-1.0, 1.0)
+CY_BOUNDS = (-1.0, 1.0)
+S_BOUNDS = (0.75, 1.25)
+
 
 def detect_lines(image_uint8: np.ndarray) -> np.ndarray | None:
     """Detect line segments using Canny + probabilistic Hough transform.
@@ -112,7 +119,7 @@ def refine_distortion(
     initial_params: dict,
     max_iters: int = config.LINE_REFINE_LM_ITERS,
     min_segments: int = config.LINE_REFINE_MIN_SEGMENTS,
-) -> dict | None:
+) -> tuple[dict, float, float] | None:
     """Attempt to refine distortion parameters using line straightness.
 
     Args:
@@ -151,23 +158,36 @@ def refine_distortion(
         initial_params["s"],
     ], dtype=np.float64)
 
+    lower = np.array([K1_BOUNDS[0], K2_BOUNDS[0], CX_BOUNDS[0], CY_BOUNDS[0], S_BOUNDS[0]])
+    upper = np.array([K1_BOUNDS[1], K2_BOUNDS[1], CX_BOUNDS[1], CY_BOUNDS[1], S_BOUNDS[1]])
+
+    # Baseline curvature cost
+    initial_cost = np.linalg.norm(_line_curvature_residuals(x0, sample_pts, img_h, img_w))
+
     result = least_squares(
         _line_curvature_residuals,
         x0,
+        bounds=(lower, upper),
         args=(sample_pts, img_h, img_w),
-        method="lm",
+        method="trf",
         max_nfev=max_iters,
     )
 
     if not result.success:
         return None
 
+    refined_cost = np.linalg.norm(_line_curvature_residuals(result.x, sample_pts, img_h, img_w))
+
+    # Require meaningful improvement
+    if refined_cost >= initial_cost * 0.99:
+        return None
+
     # Build refined params (keep k3, k4, p1, p2 from original)
     refined = dict(initial_params)
-    refined["k1"] = float(result.x[0])
-    refined["k2"] = float(result.x[1])
-    refined["cx"] = float(result.x[2])
-    refined["cy"] = float(result.x[3])
-    refined["s"] = float(result.x[4])
+    refined["k1"] = float(np.clip(result.x[0], *K1_BOUNDS))
+    refined["k2"] = float(np.clip(result.x[1], *K2_BOUNDS))
+    refined["cx"] = float(np.clip(result.x[2], *CX_BOUNDS))
+    refined["cy"] = float(np.clip(result.x[3], *CY_BOUNDS))
+    refined["s"] = float(np.clip(result.x[4], *S_BOUNDS))
 
-    return refined
+    return refined, initial_cost, refined_cost

@@ -34,7 +34,6 @@ from data.test_dataset import LensTestDataset
 from model.lens_model import LensCorrectionModel
 from model.warp import parametric_grid, warp_image
 from inference.line_refine import refine_distortion
-from training.validate import proxy_score
 
 
 def _tensor_to_uint8(t: torch.Tensor) -> np.ndarray:
@@ -51,20 +50,11 @@ def _rewarp_with_params(
     distorted: torch.Tensor,
     new_params: dict,
     device: torch.device,
+    residual_flow: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Re-warp a single image with adjusted scalar params (no residual flow).
-
-    Args:
-        distorted: (1, 3, H, W)
-        new_params: dict of scalar floats
-
-    Returns:
-        warped: (1, 3, H, W)
-    """
-    batch_params = {
-        k: torch.tensor([v], device=device) for k, v in new_params.items()
-    }
-    return warp_image(distorted, batch_params, residual_flow=None)
+    """Re-warp a single image with adjusted scalar params, preserving flow."""
+    batch_params = {k: torch.tensor([v], device=device) for k, v in new_params.items()}
+    return warp_image(distorted, batch_params, residual_flow=residual_flow)
 
 
 @torch.no_grad()
@@ -112,22 +102,18 @@ def run_inference(
 
             result = pred[i]
 
-            # Optional line refinement
+            # Optional line refinement with acceptance gate
             if do_refine:
                 result_np = _tensor_to_uint8(result)
                 scalar_params = _params_to_scalars(params, i)
 
-                refined_params = refine_distortion(result_np, scalar_params)
-                if refined_params is not None:
-                    # Re-warp with refined params (drop residual flow for clean re-warp)
+                refined = refine_distortion(result_np, scalar_params)
+                if refined is not None:
+                    refined_params, base_cost, refined_cost = refined
                     single_input = batch_tensors[i:i+1]
-                    rewarp = _rewarp_with_params(single_input, refined_params, device)
-                    rewarp_np = _tensor_to_uint8(rewarp[0])
-
-                    # Accept only if visually better (simple SSIM self-check
-                    # against the neural network output — we trust the NN
-                    # baseline and only accept if refinement clearly helps)
-                    # In practice, compare edge sharpness
+                    flow_single = flow[i:i+1] if flow is not None else None
+                    rewarp = _rewarp_with_params(single_input, refined_params, device, flow_single)
+                    # Accept because refine_distortion already enforced improvement and bounds
                     refined_count += 1
                     result = rewarp[0]
 

@@ -21,6 +21,70 @@ from torch.utils.data import Dataset
 import config
 
 
+def apply_synthetic_distortion(
+    image: np.ndarray,
+    k1: float,
+    k2: float,
+    cx_offset: float = 0.0,
+    cy_offset: float = 0.0,
+) -> np.ndarray:
+    """Apply Brown-Conrady radial distortion to a clean GT image.
+
+    For each pixel (xd, yd) in the output (distorted) image, we compute the
+    corresponding clean-image coordinate (xu, yu) via the first-order inverse
+    of the forward distortion model:
+
+        forward: xd = xu * (1 + k1*ru² + k2*ru⁴)
+        inverse approx: xu ≈ xd / (1 + k1*rd² + k2*rd⁴)
+
+    Then use cv2.remap to sample from the clean image at those locations.
+
+    Args:
+        image:     (H, W, 3) uint8 RGB clean GT image
+        k1:        primary radial coefficient  (negative=barrel, positive=pincushion)
+        k2:        secondary radial coefficient
+        cx_offset: principal point x offset in [-1, 1] (fraction of half-width)
+        cy_offset: principal point y offset in [-1, 1] (fraction of half-height)
+
+    Returns:
+        (H, W, 3) uint8 synthetically distorted image
+    """
+    H, W = image.shape[:2]
+
+    # Principal point in pixel space
+    cx_px = W / 2.0 + cx_offset * W / 2.0
+    cy_px = H / 2.0 + cy_offset * H / 2.0
+
+    # Pixel grid for the distorted output
+    y_pix, x_pix = np.mgrid[0:H, 0:W].astype(np.float32)
+
+    # Normalize to [-1, 1] relative to principal point
+    xd_n = (x_pix - cx_px) / (W / 2.0)
+    yd_n = (y_pix - cy_px) / (H / 2.0)
+
+    rd2 = xd_n ** 2 + yd_n ** 2
+    rd4 = rd2 ** 2
+
+    # Inverse of forward Brown-Conrady (first-order approx)
+    scale = 1.0 + k1 * rd2 + k2 * rd4
+    # Clamp to avoid divide-by-zero / sign flip at extreme corners
+    scale = np.clip(scale, 0.1, 10.0)
+    inv_scale = 1.0 / scale
+
+    xu_n = xd_n * inv_scale
+    yu_n = yd_n * inv_scale
+
+    # Back to pixel coords in the clean image
+    map_x = (xu_n * (W / 2.0) + cx_px).astype(np.float32)
+    map_y = (yu_n * (H / 2.0) + cy_px).astype(np.float32)
+
+    return cv2.remap(
+        image, map_x, map_y,
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REFLECT,
+    )
+
+
 def build_photometric_aug() -> A.Compose:
     """Photometric-only augmentations. Never geometric — that corrupts the
     distortion ↔ correction correspondence."""
@@ -52,7 +116,14 @@ def build_photometric_aug() -> A.Compose:
 
 
 class LensTrainDataset(Dataset):
-    """Loads (distorted, corrected) image pairs and resizes to `resolution`."""
+    """Loads (distorted, corrected) image pairs and resizes to `resolution`.
+
+    When augment=True (training split only):
+      - Photometric augmentation is applied to both images identically.
+      - With probability SYNTH_AUG_PROB, the real distorted image is replaced
+        by a synthetically distorted version of the GT, expanding the training
+        distribution to lens types not seen in the dataset.
+    """
 
     def __init__(
         self,
@@ -66,6 +137,7 @@ class LensTrainDataset(Dataset):
         self.resolution = resolution
         self.augment = augment and split == "train"
         self.aug = build_photometric_aug() if self.augment else None
+        self.synth_aug = self.augment  # synthetic distortion only during training
 
         # Collect sample directories
         all_dirs = sorted(
@@ -102,6 +174,16 @@ class LensTrainDataset(Dataset):
         # Resize
         distorted = cv2.resize(distorted, (self.resolution, self.resolution), interpolation=cv2.INTER_AREA)
         corrected = cv2.resize(corrected, (self.resolution, self.resolution), interpolation=cv2.INTER_AREA)
+
+        # Synthetic distortion augmentation: replace the real distorted image
+        # with a synthetically distorted version of the GT. The model then sees
+        # a wider range of lens types beyond those in the training set.
+        if self.synth_aug and np.random.random() < config.SYNTH_AUG_PROB:
+            k1 = np.random.uniform(*config.SYNTH_K1_RANGE)
+            k2 = np.random.uniform(*config.SYNTH_K2_RANGE)
+            cx_off = np.random.uniform(*config.SYNTH_CENTER_RANGE)
+            cy_off = np.random.uniform(*config.SYNTH_CENTER_RANGE)
+            distorted = apply_synthetic_distortion(corrected, k1, k2, cx_off, cy_off)
 
         # Photometric augmentation (same transform applied to both)
         if self.aug is not None:

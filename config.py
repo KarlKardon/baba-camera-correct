@@ -2,6 +2,7 @@
 Hyperparameters, paths, and per-phase training configs for lens distortion correction.
 """
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -9,9 +10,11 @@ from typing import Optional
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 
-DATA_ROOT = Path("data_raw")  # downloaded Kaggle dataset root
-TRAIN_DIR = DATA_ROOT / "lens-correction-train-clea"  # ~23k subfolders
-TEST_DIR = DATA_ROOT / "test-originals"               # 1000 distorted test images
+# Allow overriding dataset locations via environment variables so the 40GB
+# bucket/mount path can be pasted without code changes. Defaults remain local.
+DATA_ROOT = Path(os.getenv("DATA_ROOT", "data_raw"))
+TRAIN_DIR = Path(os.getenv("TRAIN_DIR", DATA_ROOT / "lens-correction-train-clean"))
+TEST_DIR = Path(os.getenv("TEST_DIR", DATA_ROOT / "test-originals"))
 OUTPUT_DIR = Path("outputs")
 CHECKPOINT_DIR = OUTPUT_DIR / "checkpoints"
 SUBMISSION_DIR = OUTPUT_DIR / "submissions"
@@ -35,11 +38,11 @@ class LossWeights:
 
 
 PHASE1_LOSS = LossWeights(
-    edge=0.30,
-    line_proxy=0.0,       # skip complex losses in Phase 1
+    edge=0.0,             # no edge loss until backbone has learned stable warp
+    line_proxy=0.0,
     gradient_orientation=0.0,
-    ssim=0.30,
-    photometric=0.35,
+    ssim=0.50,
+    photometric=0.50,
     flow_reg=0.0,         # no flow head active
 )
 
@@ -94,6 +97,13 @@ AUG_JPEG_QUALITY_RANGE = (60, 100)
 AUG_HUE_SHIFT = 10
 AUG_SAT_SHIFT = 20
 AUG_NOISE_VAR_LIMIT = (5.0, 25.0)
+
+# Synthetic distortion augmentation: apply random Brown-Conrady warp to GT
+# images to generate additional (distorted, GT) training pairs on-the-fly.
+SYNTH_AUG_PROB = 0.5               # fraction of training samples to augment
+SYNTH_K1_RANGE = (-0.4, 0.4)       # primary radial coefficient
+SYNTH_K2_RANGE = (-0.15, 0.15)     # secondary radial coefficient
+SYNTH_CENTER_RANGE = (-0.05, 0.05) # principal point offset (normalized)
 
 # ── Inference ──────────────────────────────────────────────────────────────────
 

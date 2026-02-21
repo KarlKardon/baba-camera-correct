@@ -39,11 +39,12 @@ class ParamHead(nn.Module):
     def forward(self, pooled: torch.Tensor) -> dict:
         raw = self.mlp(pooled)  # (B, 9)
 
-        # Unpack with appropriate activation ranges
-        k1 = raw[:, 0]  # unconstrained — typically [-1, 1] for real lenses
-        k2 = raw[:, 1]
-        k3 = raw[:, 2]
-        k4 = raw[:, 3]
+        # Unpack with bounded activations — critical to prevent fold-over warps
+        # that trigger the competition's hard-fail condition.
+        k1 = torch.tanh(raw[:, 0]) * 0.8    # radial: [-0.8,  0.8]
+        k2 = torch.tanh(raw[:, 1]) * 0.4    # radial: [-0.4,  0.4]
+        k3 = torch.tanh(raw[:, 2]) * 0.1    # radial: [-0.1,  0.1]
+        k4 = torch.tanh(raw[:, 3]) * 0.05   # radial: [-0.05, 0.05]
         p1 = raw[:, 4] * 0.1   # tangential is small
         p2 = raw[:, 5] * 0.1
         cx = torch.tanh(raw[:, 6])  # principal point in [-1, 1]
