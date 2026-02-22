@@ -36,6 +36,7 @@ class GradientOrientationLoss(nn.Module):
         )
         return dx, dy
 
+    @torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
     def _cosine_similarity_on_edges(
         self,
         pred: torch.Tensor,
@@ -63,6 +64,7 @@ class GradientOrientationLoss(nn.Module):
         masked_cos = (cos_sim * mask).sum() / (mask.sum() + 1e-8)
         return 1.0 - masked_cos  # loss: 0 = perfect alignment
 
+    @torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
     def _angle_histogram_kl(
         self,
         pred: torch.Tensor,
