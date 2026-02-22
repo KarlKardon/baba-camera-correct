@@ -15,7 +15,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
@@ -172,7 +172,7 @@ def train_phase(phase: PhaseConfig, device: torch.device, model: LensCorrectionM
     criterion = CombinedLoss(phase.loss_weights)
     optimizer = build_optimizer(model, phase)
     scheduler = CosineAnnealingLR(optimizer, T_max=phase.epochs, eta_min=1e-6)
-    scaler = GradScaler()
+    scaler = GradScaler("cuda")
 
     # Resume if specified
     start_epoch = 0
