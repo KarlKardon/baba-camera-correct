@@ -107,9 +107,8 @@ def run_inference(
                 result_np = _tensor_to_uint8(result)
                 scalar_params = _params_to_scalars(params, i)
 
-                refined = refine_distortion(result_np, scalar_params)
-                if refined is not None:
-                    refined_params, base_cost, refined_cost = refined
+                refined_params = refine_distortion(result_np, scalar_params)
+                if refined_params is not None:
                     single_input = batch_tensors[i:i+1]
                     flow_single = flow[i:i+1] if flow is not None else None
                     rewarp = _rewarp_with_params(single_input, refined_params, device, flow_single)

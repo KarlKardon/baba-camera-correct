@@ -13,7 +13,7 @@ from typing import Optional
 # Allow overriding dataset locations via environment variables so the 40GB
 # bucket/mount path can be pasted without code changes. Defaults remain local.
 DATA_ROOT = Path(os.getenv("DATA_ROOT", "data_raw"))
-TRAIN_DIR = Path(os.getenv("TRAIN_DIR", DATA_ROOT / "lens-correction-train-clean"))
+TRAIN_DIR = Path(os.getenv("TRAIN_DIR", DATA_ROOT / "lens-correction-train-cleaned"))
 TEST_DIR = Path(os.getenv("TEST_DIR", DATA_ROOT / "test-originals"))
 OUTPUT_DIR = Path("outputs")
 CHECKPOINT_DIR = OUTPUT_DIR / "checkpoints"

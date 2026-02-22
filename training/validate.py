@@ -222,10 +222,12 @@ def run_validation(
     avg = {k: v / n_batches for k, v in running.items()}
 
     if proxy_metrics:
-        # Average proxy metrics
+        # Average proxy metrics. Use proxy_ prefix to avoid clashing with
+        # training loss keys, except proxy_score which is already named clearly.
         keys = proxy_metrics[0].keys()
         for k in keys:
-            avg[f"proxy_{k}"] = np.mean([m[k] for m in proxy_metrics])
-        print(f"  Proxy score ({proxy_count} samples): {avg['proxy_proxy_score']:.4f}")
+            out_key = k if k == "proxy_score" else f"proxy_{k}"
+            avg[out_key] = float(np.mean([m[k] for m in proxy_metrics]))
+        print(f"  Proxy score ({proxy_count} samples): {avg['proxy_score']:.4f}")  # key is proxy_ + proxy_score
 
     return avg
