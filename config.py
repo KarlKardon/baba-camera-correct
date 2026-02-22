@@ -96,7 +96,10 @@ AUG_CONTRAST_LIMIT = 0.2
 AUG_JPEG_QUALITY_RANGE = (60, 100)
 AUG_HUE_SHIFT = 10
 AUG_SAT_SHIFT = 20
-AUG_NOISE_VAR_LIMIT = (5.0, 25.0)
+AUG_NOISE_VAR_LIMIT = (5.0, 25.0)  # legacy — kept for reference
+# New albumentations API: std as fraction of max pixel value (255)
+# var_limit=(5,25) → std=[√5, √25]=[2.24, 5.0] → std/255=[0.009, 0.02]
+AUG_NOISE_STD_RANGE = (0.009, 0.02)
 
 # Synthetic distortion augmentation: apply random Brown-Conrady warp to GT
 # images to generate additional (distorted, GT) training pairs on-the-fly.

@@ -96,8 +96,7 @@ def build_photometric_aug() -> A.Compose:
                 p=0.5,
             ),
             A.ImageCompression(
-                quality_lower=config.AUG_JPEG_QUALITY_RANGE[0],
-                quality_upper=config.AUG_JPEG_QUALITY_RANGE[1],
+                quality_range=config.AUG_JPEG_QUALITY_RANGE,
                 p=0.3,
             ),
             A.HueSaturationValue(
@@ -107,7 +106,7 @@ def build_photometric_aug() -> A.Compose:
                 p=0.3,
             ),
             A.GaussNoise(
-                var_limit=config.AUG_NOISE_VAR_LIMIT,
+                std_range=config.AUG_NOISE_STD_RANGE,
                 p=0.2,
             ),
         ],
