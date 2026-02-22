@@ -1,11 +1,11 @@
 """
 Training dataset: loads distorted/corrected image pairs from the Kaggle dataset.
 
-Expected directory layout (each subfolder is one sample):
+Actual flat directory layout:
     TRAIN_DIR/
-        {uuid}_g0/
-            original.jpg    <- distorted input
-            generated.jpg   <- corrected ground truth
+        {uuid}_{g}_original.jpg   <- distorted input
+        {uuid}_{g}_generated.jpg  <- corrected ground truth
+        ...
 """
 
 import os
@@ -139,31 +139,31 @@ class LensTrainDataset(Dataset):
         self.aug = build_photometric_aug() if self.augment else None
         self.synth_aug = self.augment  # synthetic distortion only during training
 
-        # Collect sample directories
-        all_dirs = sorted(
-            [d for d in Path(root).iterdir() if d.is_dir()],
-            key=lambda p: p.name,
-        )
+        # Collect all (original, generated) path pairs from the flat directory.
+        # Files are named {uuid}_{g}_original.jpg / {uuid}_{g}_generated.jpg.
+        root = Path(root)
+        all_pairs = sorted([
+            (f, root / f.name.replace("_original.jpg", "_generated.jpg"))
+            for f in root.glob("*_original.jpg")
+        ], key=lambda p: p[0].name)
 
         # Deterministic train/val split
         rng = np.random.RandomState(seed)
-        indices = rng.permutation(len(all_dirs))
-        n_val = int(len(all_dirs) * val_fraction)
+        indices = rng.permutation(len(all_pairs))
+        n_val = int(len(all_pairs) * val_fraction)
 
         if split == "val":
             selected = indices[:n_val]
         else:
             selected = indices[n_val:]
 
-        self.sample_dirs = [all_dirs[i] for i in selected]
+        self.pairs = [all_pairs[i] for i in selected]
 
     def __len__(self) -> int:
-        return len(self.sample_dirs)
+        return len(self.pairs)
 
     def __getitem__(self, idx: int):
-        d = self.sample_dirs[idx]
-        orig_path = d / "original.jpg"
-        gen_path = d / "generated.jpg"
+        orig_path, gen_path = self.pairs[idx]
 
         # Read as RGB
         distorted = cv2.imread(str(orig_path))
