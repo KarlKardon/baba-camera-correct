@@ -28,11 +28,11 @@ class GradientOrientationLoss(nn.Module):
         gray = kornia.color.rgb_to_grayscale(x)
         dx = kornia.filters.filter2d(
             gray,
-            torch.tensor([[[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]], dtype=x.dtype, device=x.device).unsqueeze(0) / 4.0,
+            torch.tensor([[[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]], dtype=x.dtype, device=x.device) / 4.0,
         )
         dy = kornia.filters.filter2d(
             gray,
-            torch.tensor([[[-1, -2, -1], [0, 0, 0], [1, 2, 1]]], dtype=x.dtype, device=x.device).unsqueeze(0) / 4.0,
+            torch.tensor([[[-1, -2, -1], [0, 0, 0], [1, 2, 1]]], dtype=x.dtype, device=x.device) / 4.0,
         )
         return dx, dy
 
